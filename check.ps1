@@ -1,125 +1,288 @@
-@echo off
-title ULTWEAKS - Optimization Status Checker
-color 0F
-cls
+<#
+.SYNOPSIS
+    ULTWEAKS - System Optimization Status Checker
+.DESCRIPTION
+    Checks if Windows has been optimized for gaming performance
+.NOTES
+    Run as Administrator for complete results
+#>
 
-echo ===============================================================
-echo            ULTWEAKS OPTIMIZATION STATUS CHECKER
-echo ===============================================================
-echo.
-echo Checking your PC optimization status...
-echo.
+#region INITIALIZATION
+Clear-Host
+$Host.UI.RawUI.WindowTitle = "ULTWEAKS - System Optimization Checker"
 
-:: Check CPU Priority
-echo [1] CPU Priority Setting...
-reg query "HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl" /v Win32PrioritySeparation >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "tokens=3" %%a in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\PriorityControl" /v Win32PrioritySeparation 2^>nul ^| find "0x"') do (
-        if "%%a"=="0x26" (echo   [OK] CPU Priority: OPTIMIZED (38)) else (echo   [XX] CPU Priority: NOT OPTIMIZED (%%a))
-    )
-) else (
-    echo   [??] CPU Priority: Not found
-)
+$Green = [ConsoleColor]::Green
+$Red = [ConsoleColor]::Red
+$Yellow = [ConsoleColor]::Yellow
+$Cyan = [ConsoleColor]::Cyan
+$White = [ConsoleColor]::White
 
-:: Check Game Bar
-echo.
-echo [2] Game Bar Status...
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\GameBar" /v UseGameBar >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "tokens=3" %%a in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\GameBar" /v UseGameBar 2^>nul ^| find "0x"') do (
-        if "%%a"=="0x0" (echo   [OK] Game Bar: DISABLED) else (echo   [XX] Game Bar: ENABLED)
-    )
-) else (
-    echo   [??] Game Bar: Not configured
-)
+Write-Host @"
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                                                                               ║
+║    ██████╗██╗  ██╗███████╗ ██████╗██╗  ██╗                                    ║
+║   ██╔════╝██║  ██║██╔════╝██╔════╝██║ ██╔╝                                    ║
+║   ██║     ███████║█████╗  ██║     █████╔╝                                     ║
+║   ██║     ██╔══██║██╔══╝  ██║     ██╔═██╗                                     ║
+║   ╚██████╗██║  ██║███████╗╚██████╗██║  ██╗                                    ║
+║    ╚═════╝╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝  ╚═╝                                    ║
+║                                                                               ║
+║    ╔═══════════════════════════════════════════════════════════════════════╗  ║
+║    ║                  SYSTEM OPTIMIZATION STATUS CHECKER                   ║  ║
+║    ║                         VERSION 1.0 - ULTWEAKS                        ║  ║
+║    ╚═══════════════════════════════════════════════════════════════════════╝  ║
+║                                                                               ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+"@ -ForegroundColor $Cyan
 
-:: Check Visual Effects
-echo.
-echo [3] Visual Effects...
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "tokens=3" %%a in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" /v VisualFXSetting 2^>nul ^| find "0x"') do (
-        if "%%a"=="0x2" (echo   [OK] Visual Effects: DISABLED) else (echo   [XX] Visual Effects: ENABLED)
-    )
-) else (
-    echo   [??] Visual Effects: Not configured
-)
+Write-Host ""
+Write-Host "                        CHECKING OPTIMIZATION STATUS" -ForegroundColor $Yellow
+Write-Host ""
 
-:: Check Transparency
-echo.
-echo [4] Transparency Effects...
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v EnableTransparency >nul 2>&1
-if %errorlevel% equ 0 (
-    for /f "tokens=3" %%a in ('reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" /v EnableTransparency 2^>nul ^| find "0x"') do (
-        if "%%a"=="0x0" (echo   [OK] Transparency: DISABLED) else (echo   [XX] Transparency: ENABLED)
-    )
-) else (
-    echo   [??] Transparency: Not configured
-)
+# Check Admin
+$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+if ($IsAdmin) {
+    Write-Host "[✓] Running as Administrator" -ForegroundColor $Green
+} else {
+    Write-Host "[!] Not running as Administrator - some checks may be incomplete" -ForegroundColor $Red
+}
+Write-Host ""
 
-:: Check Power Plan
-echo.
-echo [5] Active Power Plan...
-powercfg /getactivescheme | find "High performance" >nul
-if %errorlevel% equ 0 (
-    echo   [OK] Power Plan: HIGH PERFORMANCE
-) else (
-    powercfg /getactivescheme | find "Ultimate" >nul
-    if %errorlevel% equ 0 (
-        echo   [OK] Power Plan: ULTIMATE PERFORMANCE
-    ) else (
-        echo   [XX] Power Plan: NOT OPTIMIZED (use Balanced or Power Saver)
-    )
-)
+#region VARIABLES
+$totalChecks = 0
+$passedChecks = 0
+$failedChecks = 0
+#endregion
 
-:: Check Hibernation
-echo.
-echo [6] Hibernation Status...
-powercfg /a | find "Hibernation" | find "Not" >nul
-if %errorlevel% equ 0 (
-    echo   [OK] Hibernation: DISABLED
-) else (
-    echo   [XX] Hibernation: ENABLED (uses disk space)
-)
+#region 1. CPU PRIORITY CHECK
+$totalChecks++
+Write-Host "  ╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+Write-Host "  ║ 1. CPU & PERFORMANCE SETTINGS                                         ║" -ForegroundColor $Cyan
+Write-Host "  ╚════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
+Write-Host ""
 
-:: Check SysMain Service
-echo.
-echo [7] SysMain (Superfetch) Service...
-sc query SysMain | find "STOPPED" >nul
-if %errorlevel% equ 0 (
-    echo   [OK] SysMain: DISABLED
-) else (
-    echo   [XX] SysMain: RUNNING
-)
+# Win32PrioritySeparation
+$cpuPriority = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -ErrorAction SilentlyContinue
+if ($cpuPriority.Win32PrioritySeparation -eq 38) {
+    Write-Host "  [✓] CPU Priority Separation . . . . . . . . . . . . . . . . . OPTIMIZED (38)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] CPU Priority Separation . . . . . . . . . . . . . . . . . DEFAULT ($($cpuPriority.Win32PrioritySeparation))" -ForegroundColor $Red
+    $failedChecks++
+}
 
-:: Check Windows Search
-echo.
-echo [8] Windows Search Service...
-sc query WSearch | find "STOPPED" >nul
-if %errorlevel% equ 0 (
-    echo   [OK] Windows Search: DISABLED
-) else (
-    echo   [XX] Windows Search: RUNNING
-)
+# Visual Effects
+$visualFX = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -ErrorAction SilentlyContinue
+if ($visualFX.VisualFXSetting -eq 2) {
+    Write-Host "  [✓] Visual Effects . . . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] Visual Effects . . . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
+    $failedChecks++
+}
 
-:: Check Xbox Services
-echo.
-echo [9] Xbox Services...
-sc query XblAuthManager | find "STOPPED" >nul
-if %errorlevel% equ 0 (
-    echo   [OK] Xbox Services: DISABLED
-) else (
-    echo   [XX] Xbox Services: RUNNING
-)
+# Transparency
+$transparency = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -ErrorAction SilentlyContinue
+if ($transparency.EnableTransparency -eq 0) {
+    Write-Host "  [✓] Transparency Effects . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] Transparency Effects . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
+    $failedChecks++
+}
 
-:: Summary
-echo.
-echo ===============================================================
-echo                    CHECK COMPLETE
-echo ===============================================================
-echo.
-echo To apply all optimizations, run ULTWEAKS:
-echo Run: iex (irm https://raw.githubusercontent.com/ItsAGENT007/ultweaks/refs/heads/main/ultweaks.ps1)
-echo.
-echo ===============================================================
-pause
+Write-Host ""
+#endregion
+
+#region 2. GAME BAR & DVR
+$totalChecks++
+Write-Host "  ╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+Write-Host "  ║ 2. GAME BAR & GAME DVR                                                 ║" -ForegroundColor $Cyan
+Write-Host "  ╚════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
+Write-Host ""
+
+# Game Bar
+$gameBar = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameBar" -Name "UseGameBar" -ErrorAction SilentlyContinue
+if ($gameBar.UseGameBar -eq 0) {
+    Write-Host "  [✓] Game Bar . . . . . . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] Game Bar . . . . . . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
+    $failedChecks++
+}
+
+# Game DVR
+$gameDVR = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name "AppCaptureEnabled" -ErrorAction SilentlyContinue
+if ($gameDVR.AppCaptureEnabled -eq 0) {
+    Write-Host "  [✓] Game DVR (Capture) . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] Game DVR (Capture) . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
+    $failedChecks++
+}
+
+Write-Host ""
+#endregion
+
+#region 3. POWER PLAN
+$totalChecks++
+Write-Host "  ╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+Write-Host "  ║ 3. POWER PLAN & ENERGY SETTINGS                                        ║" -ForegroundColor $Cyan
+Write-Host "  ╚════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
+Write-Host ""
+
+$activePlan = powercfg /getactivescheme
+if ($activePlan -match "High performance" -or $activePlan -match "Ultimate Performance") {
+    Write-Host "  [✓] Active Power Plan . . . . . . . . . . . . . . . . . . . . OPTIMIZED (High Performance)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] Active Power Plan . . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Balanced/Power Saver)" -ForegroundColor $Red
+    $failedChecks++
+}
+
+# Hibernation
+$hiberFile = Get-ChildItem -Path "C:\hiberfil.sys" -ErrorAction SilentlyContinue
+if (-not $hiberFile) {
+    Write-Host "  [✓] Hibernation . . . . . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] Hibernation . . . . . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
+    $failedChecks++
+}
+
+Write-Host ""
+#endregion
+
+#region 4. SERVICES STATUS
+$totalChecks++
+Write-Host "  ╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+Write-Host "  ║ 4. BLOAT SERVICES (Disabled = Optimized)                               ║" -ForegroundColor $Cyan
+Write-Host "  ╚════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
+Write-Host ""
+
+$services = @{
+    "SysMain" = "Superfetch"
+    "WSearch" = "Windows Search"
+    "DiagTrack" = "Diagnostic Tracking"
+    "XblAuthManager" = "Xbox Live Auth"
+    "WerSvc" = "Windows Error Reporting"
+    "WpnService" = "Push Notifications"
+}
+
+foreach ($svc in $services.Keys) {
+    $serviceStatus = Get-Service -Name $svc -ErrorAction SilentlyContinue
+    if ($serviceStatus.StartType -eq "Disabled") {
+        Write-Host "  [✓] $($services[$svc]) . . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+        $passedChecks++
+    } else {
+        Write-Host "  [✗] $($services[$svc]) . . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED ($($serviceStatus.StartType))" -ForegroundColor $Red
+        $failedChecks++
+    }
+}
+
+Write-Host ""
+#endregion
+
+#region 5. TELEMETRY & NOTIFICATIONS
+$totalChecks++
+Write-Host "  ╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+Write-Host "  ║ 5. TELEMETRY & NOTIFICATIONS                                            ║" -ForegroundColor $Cyan
+Write-Host "  ╚════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
+Write-Host ""
+
+# Telemetry
+$telemetry = Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -ErrorAction SilentlyContinue
+if ($telemetry.AllowTelemetry -eq 0) {
+    Write-Host "  [✓] Telemetry . . . . . . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] Telemetry . . . . . . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Level $($telemetry.AllowTelemetry))" -ForegroundColor $Red
+    $failedChecks++
+}
+
+# Notifications
+$notifications = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications" -Name "ToastEnabled" -ErrorAction SilentlyContinue
+if ($notifications.ToastEnabled -eq 0) {
+    Write-Host "  [✓] Push Notifications . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+    $passedChecks++
+} else {
+    Write-Host "  [✗] Push Notifications . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
+    $failedChecks++
+}
+
+Write-Host ""
+#endregion
+
+#region 6. WINDOWS 11 SPECIFIC
+$OSBuild = [Environment]::OSVersion.Version.Build
+if ($OSBuild -ge 22000) {
+    $totalChecks++
+    Write-Host "  ╔════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+    Write-Host "  ║ 6. WINDOWS 11 SPECIFIC OPTIMIZATIONS                                   ║" -ForegroundColor $Cyan
+    Write-Host "  ╚════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
+    Write-Host ""
+
+    # Widgets
+    $widgets = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDa" -ErrorAction SilentlyContinue
+    if ($widgets.TaskbarDa -eq 0) {
+        Write-Host "  [✓] Widgets . . . . . . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+        $passedChecks++
+    } else {
+        Write-Host "  [✗] Widgets . . . . . . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
+        $failedChecks++
+    }
+
+    # Chat (Teams)
+    $chat = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarMn" -ErrorAction SilentlyContinue
+    if ($chat.TaskbarMn -eq 0) {
+        Write-Host "  [✓] Chat (Teams) . . . . . . . . . . . . . . . . . . . . . OPTIMIZED (Disabled)" -ForegroundColor $Green
+        $passedChecks++
+    } else {
+        Write-Host "  [✗] Chat (Teams) . . . . . . . . . . . . . . . . . . . . . NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
+        $failedChecks++
+    }
+    Write-Host ""
+}
+#endregion
+
+#region SUMMARY
+Write-Host ""
+Write-Host "╔═══════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+Write-Host "║                                   SUMMARY                                     ║" -ForegroundColor $Cyan
+Write-Host "╚═══════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
+Write-Host ""
+
+$percentOptimized = [math]::Round(($passedChecks / $totalChecks) * 100)
+
+if ($percentOptimized -ge 80) {
+    Write-Host "  STATUS: FULLY OPTIMIZED! (${percentOptimized}%)" -ForegroundColor $Green
+    Write-Host "  Your PC is ready for maximum gaming performance." -ForegroundColor $Green
+} elseif ($percentOptimized -ge 50) {
+    Write-Host "  STATUS: PARTIALLY OPTIMIZED (${percentOptimized}%)" -ForegroundColor $Yellow
+    Write-Host "  Some optimizations applied, but not all." -ForegroundColor $Yellow
+} else {
+    Write-Host "  STATUS: NOT OPTIMIZED (${percentOptimized}%)" -ForegroundColor $Red
+    Write-Host "  Your PC needs optimization for better gaming performance." -ForegroundColor $Red
+}
+
+Write-Host ""
+Write-Host "  ┌─────────────────────────────────────────────────────────────────────────┐" -ForegroundColor $White
+Write-Host "  │  📊 Total Checks: $totalChecks    [✓] Optimized: $passedChecks    [✗] Not Optimized: $failedChecks  │" -ForegroundColor $White
+Write-Host "  └─────────────────────────────────────────────────────────────────────────┘" -ForegroundColor $White
+Write-Host ""
+
+Write-Host "  ╔═══════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Yellow
+Write-Host "  ║                              RECOMMENDATION                               ║" -ForegroundColor $Yellow
+Write-Host "  ╚═══════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Yellow
+Write-Host ""
+
+if ($failedChecks -gt 0) {
+    Write-Host "  To apply all optimizations, run:" -ForegroundColor $White
+    Write-Host "  iex (irm https://raw.githubusercontent.com/ItsAGENT007/ultweaks/refs/heads/main/ultweaks.ps1)" -ForegroundColor $Cyan
+} else {
+    Write-Host "  ✓ Your PC is already fully optimized! No action needed." -ForegroundColor $Green
+}
+
+Write-Host ""
+Read-Host "Press Enter to exit"
+#endregion
