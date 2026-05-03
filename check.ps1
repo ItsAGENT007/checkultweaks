@@ -1,685 +1,602 @@
+#Requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    ULTWEAKS - Complete System Optimization Status Checker
+    ULTWEAKS - System Optimization Checker v3.0
 .DESCRIPTION
-    Checks 40+ optimization points including registry, services, power plan, network, and hardware
+    Cek status optimisasi sesuai dengan ULTWEAKS v11.0 + GPU Optimizer v5.0
+    40+ poin dicek, output berwarna, ringkasan persentase
 .NOTES
-    Version: 2.0
-    Run as Administrator for complete results
+    Version: 3.0
+    Diselaraskan dengan: ULTWEAKS_v11_FIXED.ps1 + ULTWEAKS_GPU_v5.ps1
 #>
 
-#region INITIALIZATION
 Clear-Host
-$Host.UI.RawUI.WindowTitle = "ULTWEAKS - Complete System Checker"
+$Host.UI.RawUI.WindowTitle = "ULTWEAKS - System Checker v3.0"
 
-# Colors
-$Green = [ConsoleColor]::Green
-$Red = [ConsoleColor]::Red
-$Yellow = [ConsoleColor]::Yellow
-$Cyan = [ConsoleColor]::Cyan
-$White = [ConsoleColor]::White
-$Gray = [ConsoleColor]::Gray
-
-Write-Host @"
-╔══════════════════════════════════════════════════════════════════════════════════════════════╗
-║                                                                                              ║
-║    ██╗   ██╗██╗  ████████╗██╗    ██╗███████╗ █████╗ ██╗  ██╗███████╗                         ║
-║    ██║   ██║██║  ╚══██╔══╝██║    ██║██╔════╝██╔══██╗██║ ██╔╝██╔════╝                         ║
-║    ██║   ██║██║     ██║   ██║ █╗ ██║█████╗  ███████║█████╔╝ ███████╗                         ║
-║    ██║   ██║██║     ██║   ██║███╗██║██╔══╝  ██╔══██║██╔═██╗ ╚════██║                         ║
-║    ╚██████╔╝███████╗██║   ╚███╔███╔╝███████╗██║  ██║██║  ██╗███████║                         ║
-║     ╚═════╝ ╚══════╝╚═╝    ╚══╝╚══╝ ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝                         ║
-║                                                                                              ║
-║    ╔══════════════════════════════════════════════════════════════════════════════════════╗  ║
-║    ║                    COMPLETE SYSTEM OPTIMIZATION STATUS CHECKER v2.0                  ║  ║
-║    ║                         40+ POINTS CHECKED - ULTWEAKS                                ║  ║
-║    ╚══════════════════════════════════════════════════════════════════════════════════════╝  ║
-║                                                                                              ║
-╚══════════════════════════════════════════════════════════════════════════════════════════════╝
-"@ -ForegroundColor $Cyan
+$Green   = [ConsoleColor]::Green
+$Red     = [ConsoleColor]::Red
+$Yellow  = [ConsoleColor]::Yellow
+$Cyan    = [ConsoleColor]::Cyan
+$White   = [ConsoleColor]::White
+$Gray    = [ConsoleColor]::Gray
+$Magenta = [ConsoleColor]::Magenta
 
 Write-Host ""
-Write-Host "                         SYSTEM OPTIMIZATION STATUS CHECKER" -ForegroundColor $Yellow
+Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+Write-Host "  ║    ULTWEAKS - SYSTEM OPTIMIZATION CHECKER v3.0                  ║" -ForegroundColor $Cyan
+Write-Host "  ║    Sesuai ULTWEAKS v11 + GPU Optimizer v5  |  50+ Poin          ║" -ForegroundColor $Cyan
+Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
 Write-Host ""
 
-# Check Admin
-$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
+$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]"Administrator")
 if ($IsAdmin) {
-    Write-Host "[✓] Running as Administrator (Full checks available)" -ForegroundColor $Green
+    Write-Host "  [OK] Berjalan sebagai Administrator — semua check tersedia" -ForegroundColor $Green
 } else {
-    Write-Host "[!] Not running as Administrator - some checks may be incomplete" -ForegroundColor $Red
-    Write-Host "[!] Right click PowerShell -> Run as administrator for complete results" -ForegroundColor $Yellow
+    Write-Host "  [!] Bukan Administrator — beberapa check tidak bisa dijalankan" -ForegroundColor $Red
+    Write-Host "  Klik kanan PowerShell → Run as Administrator untuk hasil lengkap" -ForegroundColor $Yellow
 }
 Write-Host ""
 
-# Variables
-$totalChecks = 0
-$passedChecks = 0
-$failedChecks = 0
-$warnings = 0
+# ── Counter ──────────────────────────────────────────────────────────────────
+$total   = 0
+$passed  = 0
+$failed  = 0
+$warning = 0
+$skipped = 0
 
-#region 1. SYSTEM INFORMATION
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 1. SYSTEM INFORMATION                                                                 ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
+# Helper functions
+function Check-OK   ($msg) { Write-Host "  [✓] $msg" -ForegroundColor $Green;   $script:passed++; $script:total++ }
+function Check-FAIL ($msg) { Write-Host "  [✗] $msg" -ForegroundColor $Red;    $script:failed++; $script:total++ }
+function Check-WARN ($msg) { Write-Host "  [!] $msg" -ForegroundColor $Yellow; $script:warning++; $script:total++ }
+function Check-SKIP ($msg) { Write-Host "  [–] $msg" -ForegroundColor $Gray;   $script:skipped++; $script:total++ }
+function Check-INFO ($msg) { Write-Host "  [i] $msg" -ForegroundColor $White }
 
-# OS Version
-$OSVersion = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion").ProductName
-$OSBuild = [Environment]::OSVersion.Version.Build
-Write-Host "  Operating System: $OSVersion (Build $OSBuild)" -ForegroundColor $White
-
-# Windows Version Detection
-if ($OSBuild -ge 22000) {
-    $IsWindows11 = $true
-    Write-Host "  Mode: Windows 11" -ForegroundColor $Cyan
-} elseif ($OSBuild -ge 17763) {
-    $IsWindows11 = $false
-    Write-Host "  Mode: Windows 10" -ForegroundColor $Cyan
-} else {
-    $IsWindows11 = $false
-    Write-Host "  Mode: Older Windows Version" -ForegroundColor $Yellow
+function Section ($title) {
+    Write-Host ""
+    Write-Host "  ━━━ $title ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━" -ForegroundColor $Cyan
 }
 
-# RAM Size
-$RAM = Get-WmiObject Win32_ComputerSystem | Select-Object -ExpandProperty TotalPhysicalMemory
-$RAMGB = [math]::Round($RAM / 1GB, 2)
-Write-Host "  Total RAM: $RAMGB GB" -ForegroundColor $White
-
-# CPU Info
-$CPU = Get-WmiObject Win32_Processor | Select-Object -ExpandProperty Name
-Write-Host "  CPU: $($CPU.Substring(0, [math]::Min(50, $CPU.Length)))..." -ForegroundColor $White
-
-# GPU Info
-$GPU = Get-WmiObject Win32_VideoController | Where-Object { $_.Name -notlike "*Mirror*" -and $_.Name -notlike "*Remote*" } | Select-Object -First 1
-if ($GPU) {
-    Write-Host "  GPU: $($GPU.Name)" -ForegroundColor $White
-    $gpuMemory = [math]::Round($GPU.AdapterRAM / 1GB, 0)
-    if ($gpuMemory -gt 0) {
-        Write-Host "  GPU Memory: $gpuMemory GB" -ForegroundColor $White
-    }
+function RegGet ($path, $name) {
+    try { return (Get-ItemProperty -Path $path -Name $name -EA Stop).$name }
+    catch { return $null }
 }
 
-# Disk Space
-$disk = Get-PSDrive -Name C
-$freeSpaceGB = [math]::Round($disk.Free / 1GB, 2)
-$totalSpaceGB = [math]::Round($disk.Used / 1GB + $freeSpaceGB, 2)
-$freePercent = [math]::Round(($freeSpaceGB / $totalSpaceGB) * 100)
-Write-Host "  C: Drive - Free: $freeSpaceGB GB / $totalSpaceGB GB ($freePercent%)" -ForegroundColor $White
-if ($freePercent -lt 20) {
-    Write-Host "  [!] Low disk space - consider cleaning!" -ForegroundColor $Yellow
-    $warnings++
-}
+#region SYSTEM INFO
+Section "INFORMASI SISTEM"
 
-Write-Host ""
+$OSBuild  = [Environment]::OSVersion.Version.Build
+$IsWin11  = $OSBuild -ge 22000
+$OSName   = (Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -EA SilentlyContinue).ProductName
+$CPU      = (Get-WmiObject Win32_Processor -EA SilentlyContinue | Select-Object -First 1).Name
+$RAM      = [math]::Round((Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).TotalPhysicalMemory / 1GB, 1)
+$GPU      = Get-WmiObject Win32_VideoController -EA SilentlyContinue |
+            Where-Object { $_.Name -notlike "*Mirror*" -and $_.Name -notlike "*Remote*" -and $_.Name -notlike "*Basic*" } |
+            Select-Object -First 1
+$GPUName  = if ($GPU) { $GPU.Name } else { "Tidak terdeteksi" }
+$IsNVIDIA = $GPUName -match "NVIDIA|GeForce|RTX|GTX"
+$IsAMD    = $GPUName -match "AMD|Radeon|RX "
+
+Check-INFO "OS      : $OSName (Build $OSBuild) $(if($IsWin11){'— Windows 11'}else{'— Windows 10'})"
+Check-INFO "CPU     : $($CPU -replace '\s+',' ')"
+Check-INFO "RAM     : ${RAM}GB"
+Check-INFO "GPU     : $GPUName"
+
+$disk = Get-PSDrive -Name C -EA SilentlyContinue
+if ($disk) {
+    $freeGB   = [math]::Round($disk.Free / 1GB, 1)
+    $totalGB  = [math]::Round(($disk.Used + $disk.Free) / 1GB, 1)
+    $freePct  = [math]::Round($freeGB / $totalGB * 100)
+    Check-INFO "Disk C  : $freeGB GB free / $totalGB GB ($freePct% free)"
+    if ($freePct -lt 15) { Check-WARN "Disk C hampir penuh (<15% free) — bisa memperlambat sistem" }
+}
 #endregion
 
-#region 2. CPU & PERFORMANCE REGISTRY
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 2. CPU & PERFORMANCE REGISTRY SETTINGS                                              ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
+#region POWER PLAN
+Section "POWER PLAN & ENERGY"
 
-# Win32PrioritySeparation
-$totalChecks++
-$cpuPriority = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" -Name "Win32PrioritySeparation" -ErrorAction SilentlyContinue
-if ($cpuPriority.Win32PrioritySeparation -eq 38) {
-    Write-Host "  [✓] CPU Priority Separation: OPTIMIZED (38)" -ForegroundColor $Green
-    $passedChecks++
-} elseif ($cpuPriority.Win32PrioritySeparation -eq 26 -or $cpuPriority.Win32PrioritySeparation -eq 42) {
-    Write-Host "  [!] CPU Priority Separation: PARTIAL ($($cpuPriority.Win32PrioritySeparation))" -ForegroundColor $Yellow
-    $warnings++
-} else {
-    Write-Host "  [✗] CPU Priority Separation: DEFAULT ($($cpuPriority.Win32PrioritySeparation))" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Processor Performance
-$totalChecks++
-$perfBoost = Get-ItemProperty -Path "HKLM\SYSTEM\CurrentControlSet\Control\Processor" -Name "Capabilities" -ErrorAction SilentlyContinue
-Write-Host "  [?] Processor Performance Boost: CHECKED" -ForegroundColor $Gray
-
-# Desktop Process Priority
-$totalChecks++
-$desktopProc = Get-ItemProperty -Path "HKCU\Control Panel\Desktop" -Name "ForegroundLockTimeout" -ErrorAction SilentlyContinue
-if ($desktopProc.ForegroundLockTimeout -eq 0 -or $desktopProc.ForegroundLockTimeout -eq 200000) {
-    Write-Host "  [✓] Foreground Lock Timeout: OPTIMIZED" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [!] Foreground Lock Timeout: DEFAULT ($($desktopProc.ForegroundLockTimeout))" -ForegroundColor $Yellow
-    $warnings++
-}
-
-Write-Host ""
-#endregion
-
-#region 3. VISUAL EFFECTS & UI
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 3. VISUAL EFFECTS & UI SETTINGS                                                     ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
-
-# Visual Effects
-$totalChecks++
-$visualFX = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" -Name "VisualFXSetting" -ErrorAction SilentlyContinue
-if ($visualFX.VisualFXSetting -eq 2) {
-    Write-Host "  [✓] Visual Effects: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} elseif ($visualFX.VisualFXSetting -eq 1) {
-    Write-Host "  [!] Visual Effects: PARTIAL (Let Windows choose)" -ForegroundColor $Yellow
-    $warnings++
-} else {
-    Write-Host "  [✗] Visual Effects: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Transparency
-$totalChecks++
-$transparency = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name "EnableTransparency" -ErrorAction SilentlyContinue
-if ($transparency.EnableTransparency -eq 0) {
-    Write-Host "  [✓] Transparency Effects: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Transparency Effects: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Menu Show Delay
-$totalChecks++
-$menuDelay = Get-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "MenuShowDelay" -ErrorAction SilentlyContinue
-if ($menuDelay.MenuShowDelay -eq 0) {
-    Write-Host "  [✓] Menu Show Delay: OPTIMIZED (0ms)" -ForegroundColor $Green
-    $passedChecks++
-} elseif ($menuDelay.MenuShowDelay -le 200) {
-    Write-Host "  [!] Menu Show Delay: PARTIAL ($($menuDelay.MenuShowDelay)ms)" -ForegroundColor $Yellow
-    $warnings++
-} else {
-    Write-Host "  [✗] Menu Show Delay: NOT OPTIMIZED ($($menuDelay.MenuShowDelay)ms)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Animations
-$totalChecks++
-$animations = Get-ItemProperty -Path "HKCU:\Control Panel\Desktop" -Name "UserPreferencesMask" -ErrorAction SilentlyContinue
-Write-Host "  [?] UI Animations: CHECKED" -ForegroundColor $Gray
-
-# Taskbar Animations
-$totalChecks++
-$taskbarAnim = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAnimations" -ErrorAction SilentlyContinue
-if ($taskbarAnim.TaskbarAnimations -eq 0) {
-    Write-Host "  [✓] Taskbar Animations: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Taskbar Animations: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-Write-Host ""
-#endregion
-
-#region 4. GAME BAR & DVR
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 4. GAME BAR & GAME DVR                                                               ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
-
-# Game Bar
-$totalChecks++
-$gameBar = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameBar" -Name "UseGameBar" -ErrorAction SilentlyContinue
-if ($gameBar.UseGameBar -eq 0) {
-    Write-Host "  [✓] Game Bar: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Game Bar: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Game DVR
-$totalChecks++
-$gameDVR = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" -Name "AppCaptureEnabled" -ErrorAction SilentlyContinue
-if ($gameDVR.AppCaptureEnabled -eq 0) {
-    Write-Host "  [✓] Game DVR (Capture): OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Game DVR (Capture): NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Game Mode
-$totalChecks++
-$gameMode = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameBar" -Name "AutoGameModeEnabled" -ErrorAction SilentlyContinue
-if ($gameMode.AutoGameModeEnabled -eq 0) {
-    Write-Host "  [✓] Game Mode: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [!] Game Mode: ENABLED (May cause issues in some games)" -ForegroundColor $Yellow
-    $warnings++
-}
-
-# GameDVR Enabled
-$totalChecks++
-$gdvr = Get-ItemProperty -Path "HKCU:\System\GameConfigStore" -Name "GameDVR_Enabled" -ErrorAction SilentlyContinue
-if ($gdvr.GameDVR_Enabled -eq 0) {
-    Write-Host "  [✓] GameDVR Background: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] GameDVR Background: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-Write-Host ""
-#endregion
-
-#region 5. POWER PLAN
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 5. POWER PLAN & ENERGY SETTINGS                                                     ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
-
-# Active Power Plan
-$totalChecks++
-$activePlan = powercfg /getactivescheme
-if ($activePlan -match "High performance" -or $activePlan -match "Ultimate Performance") {
-    Write-Host "  [✓] Active Power Plan: OPTIMIZED (High Performance)" -ForegroundColor $Green
-    $passedChecks++
+# Active power plan
+$activePlan = powercfg /getactivescheme 2>$null
+if ($activePlan -match "Ultimate Performance") {
+    Check-OK "Power Plan: Ultimate Performance (TERBAIK untuk gaming)"
+} elseif ($activePlan -match "High performance") {
+    Check-WARN "Power Plan: High Performance (bagus, tapi Ultimate lebih baik)"
 } elseif ($activePlan -match "Balanced") {
-    Write-Host "  [✗] Active Power Plan: NOT OPTIMIZED (Balanced)" -ForegroundColor $Red
-    $failedChecks++
-} elseif ($activePlan -match "Power saver") {
-    Write-Host "  [✗] Active Power Plan: NOT OPTIMIZED (Power Saver - BAD for gaming!)" -ForegroundColor $Red
-    $failedChecks++
+    Check-FAIL "Power Plan: Balanced (tidak optimal untuk gaming)"
 } else {
-    Write-Host "  [✗] Active Power Plan: NOT OPTIMIZED (Unknown)" -ForegroundColor $Red
-    $failedChecks++
+    Check-FAIL "Power Plan: Power Saver atau tidak dikenal (buruk untuk gaming)"
 }
 
 # Hibernation
-$totalChecks++
-$hiberFile = Get-ChildItem -Path "C:\hiberfil.sys" -ErrorAction SilentlyContinue
-if (-not $hiberFile) {
-    Write-Host "  [✓] Hibernation: OPTIMIZED (Disabled - saves disk space)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    $hiberSize = [math]::Round($hiberFile.Length / 1GB, 2)
-    Write-Host "  [✗] Hibernation: NOT OPTIMIZED (Enabled - uses $hiberSize GB)" -ForegroundColor $Red
-    $failedChecks++
+$hib = Get-ChildItem "C:\hiberfil.sys" -EA SilentlyContinue
+if (-not $hib) { Check-OK "Hibernation: Disabled (hemat disk)" }
+else {
+    $hibGB = [math]::Round($hib.Length / 1GB, 1)
+    Check-WARN "Hibernation: Enabled (menggunakan ${hibGB}GB disk)"
 }
 
-# Sleep Timeouts
-$totalChecks++
-$sleepTimeout = powercfg -query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 2>$null
-if ($sleepTimeout -match "0x00000000") {
-    Write-Host "  [✓] Sleep Timeout: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [!] Sleep Timeout: ENABLED (PC may sleep during gaming)" -ForegroundColor $Yellow
-    $warnings++
-}
+# Sleep timeout
+$sleepQ = powercfg -query SCHEME_CURRENT SUB_SLEEP STANDBYIDLE 2>$null
+if ($sleepQ -match "0x00000000") { Check-OK "Sleep Timeout: Disabled" }
+else { Check-WARN "Sleep Timeout: Enabled (PC bisa sleep saat game loading)" }
 
 # USB Selective Suspend
-$totalChecks++
-$usbSuspend = powercfg -query SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 2>$null
-if ($usbSuspend -match "0x00000000") {
-    Write-Host "  [✓] USB Selective Suspend: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] USB Selective Suspend: NOT OPTIMIZED (May cause input lag)" -ForegroundColor $Red
-    $failedChecks++
-}
+$usbQ = powercfg -query SCHEME_CURRENT 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 2>$null
+if ($usbQ -match "0x00000000") { Check-OK "USB Selective Suspend: Disabled (kurangi input lag)" }
+else { Check-FAIL "USB Selective Suspend: Enabled (bisa tambah input lag)" }
 
-Write-Host ""
+# PCIe ASPM
+$pcieQ = powercfg -query SCHEME_CURRENT 501a4d13-42af-4429-9fd1-a8218c268e20 ee12f906-d277-404b-b6da-e5fa1a576df5 2>$null
+if ($pcieQ -match "0x00000000") { Check-OK "PCIe Link State Power Mgmt: Disabled" }
+else { Check-WARN "PCIe Link State Power Mgmt: Enabled" }
+
+# CPU Throttle max
+$cpuThrotQ = powercfg -query SCHEME_CURRENT SUB_PROCESSOR PROCTHROTTLEMAX 2>$null
+if ($cpuThrotQ -match "0x00000064") { Check-OK "CPU Max Performance: 100%" }
+else { Check-FAIL "CPU Max Performance: Di bawah 100% (throttle aktif)" }
 #endregion
 
-#region 6. SERVICES STATUS
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 6. BLOAT SERVICES (Disabled = Optimized)                                            ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
+#region CPU & REGISTRY
+Section "CPU PRIORITY & REGISTRY PERFORMANCE"
 
-$services = @(
-    @{Name="SysMain"; Display="SysMain (Superfetch)"},
-    @{Name="WSearch"; Display="Windows Search Indexer"},
-    @{Name="DiagTrack"; Display="Diagnostic Tracking (Telemetry)"},
-    @{Name="DPS"; Display="Diagnostic Policy Service"},
-    @{Name="WdiServiceHost"; Display="Diagnostic Service Host"},
-    @{Name="WdiSystemHost"; Display="Diagnostic System Host"},
-    @{Name="XblAuthManager"; Display="Xbox Live Authentication"},
-    @{Name="XboxNetApiSvc"; Display="Xbox Live Networking"},
-    @{Name="XboxGipSvc"; Display="Xbox Accessory Management"},
-    @{Name="WerSvc"; Display="Windows Error Reporting"},
-    @{Name="WpnService"; Display="Windows Push Notifications"},
-    @{Name="PcaSvc"; Display="Program Compatibility Assistant"},
-    @{Name="TabletInputService"; Display="Touch Keyboard Service"},
-    @{Name="MapsBroker"; Display="Downloaded Maps Manager"},
-    @{Name="lfsvc"; Display="Geolocation Service"},
-    @{Name="Fax"; Display="Fax Service"},
-    @{Name="RemoteRegistry"; Display="Remote Registry"},
-    @{Name="PrintSpooler"; Display="Print Spooler (if no printer)"}
+$v = RegGet "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" "Win32PrioritySeparation"
+if ($v -eq 38) { Check-OK "CPU Priority Separation: 38 (optimal gaming)" }
+elseif ($v -eq 26 -or $v -eq 2) { Check-WARN "CPU Priority Separation: $v (default)" }
+else { Check-FAIL "CPU Priority Separation: $v (tidak optimal)" }
+
+$v = RegGet "HKCU:\Control Panel\Desktop" "ForegroundLockTimeout"
+if ($v -eq 0) { Check-OK "Foreground Lock Timeout: 0" }
+else { Check-WARN "Foreground Lock Timeout: $v (bukan 0)" }
+
+$mmPath = "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
+$v = RegGet $mmPath "SystemResponsiveness"
+if ($v -eq 0) { Check-OK "SystemResponsiveness: 0 (game prioritas penuh)" }
+else { Check-FAIL "SystemResponsiveness: $v (bukan 0)" }
+
+$v = RegGet $mmPath "NetworkThrottlingIndex"
+if ($v -eq 4294967295) { Check-OK "Network Throttling Index: Disabled" }
+else { Check-FAIL "Network Throttling Index: Masih aktif ($v)" }
+
+$gamePath = "$mmPath\Tasks\Games"
+$gpuPrio  = RegGet $gamePath "GPU Priority"
+$taskPrio = RegGet $gamePath "Priority"
+$schedCat = RegGet $gamePath "Scheduling Category"
+if ($gpuPrio -eq 8 -and $taskPrio -eq 6 -and $schedCat -eq "High") {
+    Check-OK "Multimedia Games Task: GPU Priority 8, Priority 6, Scheduling High"
+} else {
+    Check-FAIL "Multimedia Games Task: Belum dioptimasi (GPU=$gpuPrio, Prio=$taskPrio, Sched=$schedCat)"
+}
+
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" "StartupDelayInMSec"
+if ($v -eq 0) { Check-OK "Explorer Startup Delay: 0ms" }
+else { Check-WARN "Explorer Startup Delay: Default (belum dihilangkan)" }
+#endregion
+
+#region VISUAL EFFECTS
+Section "VISUAL EFFECTS & UI"
+
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\VisualEffects" "VisualFXSetting"
+if ($v -eq 2) { Check-OK "Visual Effects: Performance mode (semua efek off)" }
+elseif ($v -eq 1) { Check-WARN "Visual Effects: Let Windows choose" }
+else { Check-FAIL "Visual Effects: Masih aktif (menggunakan resource)" }
+
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" "EnableTransparency"
+if ($v -eq 0) { Check-OK "Transparency Effects: Disabled" }
+else { Check-FAIL "Transparency Effects: Enabled (buang resource GPU)" }
+
+$v = RegGet "HKCU:\Control Panel\Desktop" "MenuShowDelay"
+if ($v -eq "0" -or $v -eq 0) { Check-OK "Menu Show Delay: 0ms" }
+elseif ([int]$v -le 100) { Check-WARN "Menu Show Delay: ${v}ms (belum 0)" }
+else { Check-FAIL "Menu Show Delay: ${v}ms (default, tidak optimal)" }
+
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "TaskbarAnimations"
+if ($v -eq 0) { Check-OK "Taskbar Animations: Disabled" }
+else { Check-FAIL "Taskbar Animations: Enabled" }
+
+$v = RegGet "HKCU:\Control Panel\Desktop\WindowMetrics" "MinAnimate"
+if ($v -eq "0" -or $v -eq 0) { Check-OK "Window Minimize/Maximize Animations: Disabled" }
+else { Check-FAIL "Window Minimize/Maximize Animations: Enabled" }
+#endregion
+
+#region GAME BAR & DVR
+Section "GAME BAR & DVR"
+
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameBar" "UseGameBar"
+if ($v -eq 0) { Check-OK "Game Bar: Disabled" }
+else { Check-FAIL "Game Bar: Enabled (buang resource)" }
+
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameDVR" "AppCaptureEnabled"
+if ($v -eq 0) { Check-OK "Game DVR Capture: Disabled" }
+else { Check-FAIL "Game DVR Capture: Enabled (recording background)" }
+
+$v = RegGet "HKCU:\System\GameConfigStore" "GameDVR_Enabled"
+if ($v -eq 0) { Check-OK "GameDVR Background: Disabled" }
+else { Check-FAIL "GameDVR Background: Enabled" }
+
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\GameBar" "AutoGameModeEnabled"
+if ($v -eq 0) { Check-OK "Auto Game Mode: Disabled (bisa konflik dengan beberapa game)" }
+else { Check-WARN "Auto Game Mode: Enabled (umumnya tidak masalah, tapi matikan jika ada lag)" }
+#endregion
+
+#region GPU
+Section "GPU OPTIMIZATION"
+
+# MPO
+$v = RegGet "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" "OverlayTestMode"
+if ($v -eq 5) { Check-OK "MPO (Multi-Plane Overlay): Disabled — fix stuttering" }
+else { Check-FAIL "MPO: Masih aktif (penyebab stuttering di NVIDIA & AMD)" }
+
+# TDR
+$tdrLevel = RegGet "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "TdrLevel"
+$tdrDelay = RegGet "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "TdrDelay"
+if ($tdrLevel -eq 3 -and $tdrDelay -ge 10) {
+    Check-OK "GPU TDR: Level=3 (recovery aktif), Delay=${tdrDelay}s — aman"
+} elseif ($tdrLevel -eq 0) {
+    Check-WARN "GPU TDR Level=0 — recovery MATI (GPU hang = langsung BSOD/freeze, berbahaya)"
+} else {
+    Check-WARN "GPU TDR: Level=$tdrLevel, Delay=$tdrDelay (tidak optimal)"
+}
+
+# HAGS
+$hags = RegGet "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode"
+if ($IsNVIDIA -or $IsAMD) {
+    if ($hags -eq 2) { Check-OK "HAGS (Hardware Accelerated GPU Scheduling): Enabled" }
+    else { Check-FAIL "HAGS: Disabled (aktifkan untuk NVIDIA RTX/AMD RX 5000+)" }
+} else {
+    Check-SKIP "HAGS: GPU tidak terdeteksi sebagai NVIDIA/AMD"
+}
+
+# NVIDIA specific
+if ($IsNVIDIA) {
+    $adapterBase = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+    $nvidiaPath  = $null
+    foreach ($i in @("0000","0001","0002","0003")) {
+        $p    = "$adapterBase\$i"
+        $desc = RegGet $p "DriverDesc"
+        if ($desc -and $desc -match "NVIDIA|GeForce|RTX|GTX") { $nvidiaPath = $p; break }
+    }
+
+    if ($nvidiaPath) {
+        $pmSrc = RegGet $nvidiaPath "PerfLevelSrc"
+        $pmLvl = RegGet $nvidiaPath "PowerMizerLevel"
+        if ($pmSrc -eq 0x2222 -and $pmLvl -eq 1) {
+            Check-OK "NVIDIA PowerMizer: Prefer Maximum Performance (PerfLevelSrc=0x2222)"
+        } else {
+            Check-FAIL "NVIDIA PowerMizer: Belum diset ke Max Performance (PerfLevelSrc=$pmSrc)"
+        }
+
+        $nvParam = "HKLM:\SYSTEM\CurrentControlSet\Services\nvlddmkm\Parameters"
+        $v = RegGet $nvParam "DisableDynamicPstate"
+        if ($v -eq 1) { Check-OK "NVIDIA Dynamic Pstate: Disabled (clock lebih stabil)" }
+        else { Check-WARN "NVIDIA Dynamic Pstate: Enabled (clock bisa turun saat idle game)" }
+    } else {
+        Check-SKIP "NVIDIA registry path tidak ditemukan"
+    }
+
+    # Telemetry service
+    $nts = Get-Service -Name "NvTelemetryContainer" -EA SilentlyContinue
+    if ($nts -and $nts.StartType -eq "Disabled") {
+        Check-OK "NVIDIA Telemetry Service: Disabled"
+    } else {
+        Check-WARN "NVIDIA Telemetry Service: Masih aktif (buang resource kecil)"
+    }
+}
+
+# AMD specific
+if ($IsAMD) {
+    $adapterBase = "HKLM:\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}"
+    $amdPath = $null
+    foreach ($i in @("0000","0001","0002","0003")) {
+        $p    = "$adapterBase\$i"
+        $desc = RegGet $p "DriverDesc"
+        if ($desc -and $desc -match "AMD|Radeon|RX ") { $amdPath = $p; break }
+    }
+
+    if ($amdPath) {
+        $v = RegGet $amdPath "EnableUlps"
+        if ($v -eq 0) { Check-OK "AMD ULPS: Disabled (GPU tidak sleep saat idle)" }
+        else { Check-FAIL "AMD ULPS: Enabled (penyebab micro-stutter saat GPU idle)" }
+
+        $v = RegGet $amdPath "PP_DeepSleepDisable"
+        if ($v -eq 1) { Check-OK "AMD Deep Sleep: Disabled" }
+        else { Check-WARN "AMD Deep Sleep: Enabled" }
+
+        $v = RegGet $amdPath "DisableDMACopy"
+        if ($v -eq 1) { Check-OK "AMD DMA Copy overhead: Disabled" }
+        else { Check-WARN "AMD DMA Copy: Enabled (sedikit overhead)" }
+
+        $v = RegGet $amdPath "KMD_EnableComputePreemption"
+        if ($v -eq 0) { Check-OK "AMD Compute Preemption: Disabled (FPS lebih stabil)" }
+        else { Check-WARN "AMD Compute Preemption: Enabled" }
+    } else {
+        Check-SKIP "AMD registry path tidak ditemukan"
+    }
+}
+
+# DWM MaxPreRendered
+$v = RegGet "HKLM:\SOFTWARE\Microsoft\Windows\Dwm" "MaxPreRendered"
+if ($v -eq 1) { Check-OK "DWM MaxPreRendered: 1 (lower input latency)" }
+else { Check-WARN "DWM MaxPreRendered: Default (belum diset ke 1)" }
+#endregion
+
+#region NETWORK
+Section "NETWORK OPTIMIZATION"
+
+# DNS
+$adapters = Get-NetAdapter | Where-Object { $_.Status -eq "Up" } | Select-Object -First 1
+if ($adapters) {
+    $dns = (Get-DnsClientServerAddress -InterfaceIndex $adapters.InterfaceIndex -AddressFamily IPv4 -EA SilentlyContinue).ServerAddresses
+    if ($dns -contains "1.1.1.1") { Check-OK "DNS: Cloudflare (1.1.1.1) — fast & private" }
+    elseif ($dns -contains "8.8.8.8") { Check-WARN "DNS: Google (8.8.8.8) — bagus tapi Cloudflare lebih cepat" }
+    else { Check-WARN "DNS: $($dns -join ', ') (bukan Cloudflare/Google)" }
+}
+
+# Nagle's Algorithm — cek interface yang punya IP
+$nagles = $false
+$tcpIfaces = Get-ChildItem "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\" -EA SilentlyContinue
+foreach ($iface in $tcpIfaces) {
+    $ip = RegGet $iface.PSPath "DhcpIPAddress"
+    if ($ip -and $ip -ne "0.0.0.0") {
+        $ack = RegGet $iface.PSPath "TcpAckFrequency"
+        $nd  = RegGet $iface.PSPath "TCPNoDelay"
+        if ($ack -eq 1 -and $nd -eq 1) { $nagles = $true; break }
+    }
+}
+if ($nagles) { Check-OK "Nagle's Algorithm: Disabled (TcpAckFrequency=1, TCPNoDelay=1)" }
+else { Check-FAIL "Nagle's Algorithm: Enabled (tambah latency 10-20ms)" }
+
+# TCP RSS
+$rss = netsh int tcp show global 2>$null | Select-String "Receive-Side Scaling"
+if ($rss -match "enabled") { Check-OK "TCP RSS (Receive-Side Scaling): Enabled" }
+else { Check-WARN "TCP RSS: Disabled" }
+
+# P2P Windows Update
+$v = RegGet "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization" "DODownloadMode"
+if ($v -eq 0) { Check-OK "Windows Update P2P Delivery: Disabled (tidak pakai bandwidth)" }
+else { Check-WARN "Windows Update P2P: Enabled (berbagi bandwidth ke orang lain)" }
+
+# Windows Update mode
+$v = RegGet "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU" "AUOptions"
+if ($v -eq 2) { Check-OK "Windows Update: Notify Only (tidak auto-download)" }
+elseif ($v -eq 1) { Check-WARN "Windows Update: Disabled penuh (tidak direkomendasikan, security risk)" }
+else { Check-WARN "Windows Update: Auto-download aktif (bisa mengganggu saat gaming)" }
+#endregion
+
+#region SERVICES
+Section "BLOAT SERVICES (Disabled = Optimal)"
+
+$serviceChecks = @(
+    @{Name="DiagTrack";     Label="Connected User Experiences & Telemetry"},
+    @{Name="DPS";           Label="Diagnostic Policy Service"},
+    @{Name="WdiServiceHost";Label="Diagnostic Service Host"},
+    @{Name="WdiSystemHost"; Label="Diagnostic System Host"},
+    @{Name="WerSvc";        Label="Windows Error Reporting"},
+    @{Name="XblAuthManager";Label="Xbox Live Auth Manager"},
+    @{Name="XboxNetApiSvc"; Label="Xbox Live Networking"},
+    @{Name="XboxGipSvc";    Label="Xbox Accessory Management"},
+    @{Name="BcastDVRUserService"; Label="GameDVR Broadcast Service"},
+    @{Name="WSearch";       Label="Windows Search (Indexing)"},
+    @{Name="RemoteRegistry";Label="Remote Registry"},
+    @{Name="RemoteAccess";  Label="Routing & Remote Access"},
+    @{Name="Fax";           Label="Fax Service"},
+    @{Name="WMPNetworkSvc"; Label="Windows Media Player Network"},
+    @{Name="lfsvc";         Label="Geolocation Service"},
+    @{Name="MapsBroker";    Label="Downloaded Maps Manager"},
+    @{Name="CDPSvc";        Label="Connected Devices Platform"},
+    @{Name="WpnService";    Label="Windows Push Notifications"},
+    @{Name="PcaSvc";        Label="Program Compatibility Assistant"},
+    @{Name="RetailDemo";    Label="Retail Demo Service"},
+    @{Name="SysMain";       Label="SysMain/Superfetch"}
 )
 
-foreach ($svc in $services) {
-    $totalChecks++
-    $serviceStatus = Get-Service -Name $svc.Name -ErrorAction SilentlyContinue
-    if ($serviceStatus -and $serviceStatus.StartType -eq "Disabled") {
-        Write-Host "  [✓] $($svc.Display): OPTIMIZED (Disabled)" -ForegroundColor $Green
-        $passedChecks++
-    } elseif ($serviceStatus -and $serviceStatus.StartType -eq "Manual") {
-        Write-Host "  [!] $($svc.Display): PARTIAL (Manual)" -ForegroundColor $Yellow
-        $warnings++
-    } elseif ($serviceStatus -and $serviceStatus.StartType -eq "Automatic") {
-        Write-Host "  [✗] $($svc.Display): NOT OPTIMIZED (Running)" -ForegroundColor $Red
-        $failedChecks++
+# Yang HARUS tetap Running (safety check)
+$mustRun = @("WlanSvc","AudioSrv","AudioEndpointBuilder","EventLog","PlugPlay","RpcSs","Dhcp","Dnscache","BFE","mpssvc")
+Write-Host "  [i] WiFi, Audio, dan service penting lain dikecualikan dari check ini" -ForegroundColor $White
+
+foreach ($svc in $serviceChecks) {
+    $s = Get-Service -Name $svc.Name -EA SilentlyContinue
+    if (-not $s) {
+        Check-SKIP "$($svc.Label): Tidak ada di sistem ini"
+        continue
+    }
+    if ($s.StartType -eq "Disabled") {
+        Check-OK "$($svc.Label): Disabled"
+    } elseif ($s.StartType -eq "Manual") {
+        Check-WARN "$($svc.Label): Manual (bukan Disabled)"
+    } else {
+        Check-FAIL "$($svc.Label): Running (buang resource)"
     }
 }
 
+# Safety check — pastikan service penting masih jalan
 Write-Host ""
-#endregion
-
-#region 7. TELEMETRY & PRIVACY
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 7. TELEMETRY & PRIVACY SETTINGS                                                     ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
-
-# Telemetry
-$totalChecks++
-$telemetry = Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" -Name "AllowTelemetry" -ErrorAction SilentlyContinue
-if ($telemetry.AllowTelemetry -eq 0) {
-    Write-Host "  [✓] Telemetry Data Collection: OPTIMIZED (Disabled - 0)" -ForegroundColor $Green
-    $passedChecks++
-} elseif ($telemetry.AllowTelemetry -eq 1) {
-    Write-Host "  [!] Telemetry Data Collection: PARTIAL (Basic - 1)" -ForegroundColor $Yellow
-    $warnings++
-} else {
-    Write-Host "  [✗] Telemetry Data Collection: NOT OPTIMIZED (Full - $($telemetry.AllowTelemetry))" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Push Notifications
-$totalChecks++
-$notifications = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications" -Name "ToastEnabled" -ErrorAction SilentlyContinue
-if ($notifications.ToastEnabled -eq 0) {
-    Write-Host "  [✓] Push Notifications: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Push Notifications: NOT OPTIMIZED (Enabled - disturbs gaming)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Background Apps
-$totalChecks++
-$backgroundApps = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications" -Name "GlobalUserDisabled" -ErrorAction SilentlyContinue
-if ($backgroundApps.GlobalUserDisabled -eq 1) {
-    Write-Host "  [✓] Background Apps: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Background Apps: NOT OPTIMIZED (Apps run in background)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Cortana
-$totalChecks++
-$cortana = Get-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" -Name "AllowCortana" -ErrorAction SilentlyContinue
-if ($cortana.AllowCortana -eq 0) {
-    Write-Host "  [✓] Cortana: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Cortana: NOT OPTIMIZED (Running in background)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Web Search in Start Menu
-$totalChecks++
-$webSearch = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" -Name "BingSearchEnabled" -ErrorAction SilentlyContinue
-if ($webSearch.BingSearchEnabled -eq 0) {
-    Write-Host "  [✓] Web Search in Start Menu: OPTIMIZED (Disabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Web Search in Start Menu: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-Write-Host ""
-#endregion
-
-#region 8. NETWORK OPTIMIZATION
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 8. NETWORK OPTIMIZATION (For lower ping)                                            ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
-
-# Nagle's Algorithm
-$totalChecks++
-$interface = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TcpAckFrequency" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($interface.TcpAckFrequency -eq 1) {
-    Write-Host "  [✓] Nagle's Algorithm: OPTIMIZED (Disabled - lower latency)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Nagle's Algorithm: NOT OPTIMIZED (Higher latency)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# TCP NoDelay
-$totalChecks++
-$tcpNoDelay = Get-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\*" -Name "TCPNoDelay" -ErrorAction SilentlyContinue | Select-Object -First 1
-if ($tcpNoDelay.TCPNoDelay -eq 1) {
-    Write-Host "  [✓] TCP NoDelay: OPTIMIZED (Enabled)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] TCP NoDelay: NOT OPTIMIZED (Disabled)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# TCP AutoTuning
-$totalChecks++
-$autoTuning = netsh int tcp show global | findstr "Receive-Side Scaling"
-if ($autoTuning -match "enabled") {
-    Write-Host "  [✓] TCP AutoTuning: OPTIMIZED (Normal)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] TCP AutoTuning: NOT OPTIMIZED ($autoTuning)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-# Windows Update P2P
-$totalChecks++
-$p2pUpdate = Get-ItemProperty -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config" -Name "DODownloadMode" -ErrorAction SilentlyContinue
-if ($p2pUpdate.DODownloadMode -eq 0) {
-    Write-Host "  [✓] P2P Windows Update: OPTIMIZED (Disabled - saves bandwidth)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] P2P Windows Update: NOT OPTIMIZED (Using your bandwidth)" -ForegroundColor $Red
-    $failedChecks++
-}
-
-Write-Host ""
-#endregion
-
-#region 9. WINDOWS 11 SPECIFIC
-if ($IsWindows11) {
-    Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-    Write-Host "  ║ 9. WINDOWS 11 SPECIFIC OPTIMIZATIONS                                                ║" -ForegroundColor $Cyan
-    Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-    Write-Host ""
-
-    # Widgets
-    $totalChecks++
-    $widgets = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarDa" -ErrorAction SilentlyContinue
-    if ($widgets.TaskbarDa -eq 0) {
-        Write-Host "  [✓] Widgets: OPTIMIZED (Disabled)" -ForegroundColor $Green
-        $passedChecks++
-    } else {
-        Write-Host "  [✗] Widgets: NOT OPTIMIZED (Uses RAM/CPU)" -ForegroundColor $Red
-        $failedChecks++
+Write-Host "  [i] Safety check — service penting:" -ForegroundColor $White
+foreach ($svcName in @("WlanSvc","AudioSrv","EventLog")) {
+    $s = Get-Service -Name $svcName -EA SilentlyContinue
+    if ($s -and $s.Status -eq "Running") {
+        Write-Host "  [✓] $svcName (${($s.DisplayName)}): Running (BENAR)" -ForegroundColor $Green
+    } elseif ($s -and $s.Status -ne "Running") {
+        Write-Host "  [!] $svcName (${($s.DisplayName)}): $($s.Status) — SEHARUSNYA RUNNING!" -ForegroundColor $Red
     }
-
-    # Chat (Teams)
-    $totalChecks++
-    $chat = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarMn" -ErrorAction SilentlyContinue
-    if ($chat.TaskbarMn -eq 0) {
-        Write-Host "  [✓] Chat (Teams): OPTIMIZED (Disabled)" -ForegroundColor $Green
-        $passedChecks++
-    } else {
-        Write-Host "  [✗] Chat (Teams): NOT OPTIMIZED (Runs in background)" -ForegroundColor $Red
-        $failedChecks++
-    }
-
-    # Task View Animation
-    $totalChecks++
-    $taskView = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskViewAnimation" -ErrorAction SilentlyContinue
-    if ($taskView.TaskViewAnimation -eq 0) {
-        Write-Host "  [✓] Task View Animation: OPTIMIZED (Disabled)" -ForegroundColor $Green
-        $passedChecks++
-    } else {
-        Write-Host "  [✗] Task View Animation: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-        $failedChecks++
-    }
-
-    # Snap Assist
-    $totalChecks++
-    $snapAssist = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "EnableSnapAssistFlyout" -ErrorAction SilentlyContinue
-    if ($snapAssist.EnableSnapAssistFlyout -eq 0) {
-        Write-Host "  [✓] Snap Assist: OPTIMIZED (Disabled)" -ForegroundColor $Green
-        $passedChecks++
-    } else {
-        Write-Host "  [✗] Snap Assist: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-        $failedChecks++
-    }
-
-    # News and Interests
-    $totalChecks++
-    $news = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Feeds" -Name "ShellFeedsTaskbarViewMode" -ErrorAction SilentlyContinue
-    if ($news.ShellFeedsTaskbarViewMode -eq 2) {
-        Write-Host "  [✓] News and Interests: OPTIMIZED (Disabled)" -ForegroundColor $Green
-        $passedChecks++
-    } else {
-        Write-Host "  [✗] News and Interests: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-        $failedChecks++
-    }
-
-    # Recommended Files
-    $totalChecks++
-    $recommended = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "Start_IrisRecommendations" -ErrorAction SilentlyContinue
-    if ($recommended.Start_IrisRecommendations -eq 0) {
-        Write-Host "  [✓] Recommended Files: OPTIMIZED (Disabled in Start Menu)" -ForegroundColor $Green
-        $passedChecks++
-    } else {
-        Write-Host "  [✗] Recommended Files: NOT OPTIMIZED (Enabled)" -ForegroundColor $Red
-        $failedChecks++
-    }
-
-    Write-Host ""
 }
 #endregion
 
-#region 10. STARTUP & BOOT OPTIMIZATION
-Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║ 10. STARTUP & BOOT OPTIMIZATION                                                      ║" -ForegroundColor $Cyan
-Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
+#region PRIVACY & TELEMETRY
+Section "PRIVACY & TELEMETRY"
 
-# Fast Startup
-$totalChecks++
-$fastStartup = powercfg /a | findstr "Hibernation"
-if ($fastStartup -and $fastStartup -notmatch "Not") {
-    Write-Host "  [!] Fast Startup: ENABLED (Can cause driver issues)" -ForegroundColor $Yellow
-    $warnings++
-} else {
-    Write-Host "  [✓] Fast Startup: DISABLED" -ForegroundColor $Green
-    $passedChecks++
-}
+$v = RegGet "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry"
+if ($v -eq 0) { Check-OK "Telemetry: Disabled (level 0)" }
+elseif ($v -eq 1) { Check-WARN "Telemetry: Basic (level 1)" }
+else { Check-FAIL "Telemetry: Full (level $v — mengirim data ke Microsoft)" }
 
-# Startup Delay
-$totalChecks++
-$startupDelay = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" -Name "StartupDelayInMSec" -ErrorAction SilentlyContinue
-if ($startupDelay.StartupDelayInMSec -eq 0) {
-    Write-Host "  [✓] Startup Delay: OPTIMIZED (Removed)" -ForegroundColor $Green
-    $passedChecks++
-} else {
-    Write-Host "  [✗] Startup Delay: NOT OPTIMIZED (Default delay applies)" -ForegroundColor $Red
-    $failedChecks++
-}
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\PushNotifications" "ToastEnabled"
+if ($v -eq 0) { Check-OK "Toast Notifications: Disabled" }
+else { Check-WARN "Toast Notifications: Enabled (bisa muncul saat game)" }
 
-Write-Host ""
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications" "GlobalUserDisabled"
+if ($v -eq 1) { Check-OK "Background Apps: Disabled" }
+else { Check-FAIL "Background Apps: Enabled (berjalan di background)" }
+
+$v = RegGet "HKLM:\SOFTWARE\Policies\Microsoft\Windows\Windows Search" "AllowCortana"
+if ($v -eq 0) { Check-OK "Cortana: Disabled" }
+else { Check-WARN "Cortana: Enabled (berjalan di background)" }
+
+$v = RegGet "HKCU:\Software\Microsoft\Windows\CurrentVersion\Search" "BingSearchEnabled"
+if ($v -eq 0) { Check-OK "Bing Search di Start Menu: Disabled" }
+else { Check-WARN "Bing Search: Enabled (menggunakan internet saat search)" }
+
+$v = RegGet "HKLM:\SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo" "DisabledByGroupPolicy"
+if ($v -eq 1) { Check-OK "Advertising ID: Disabled" }
+else { Check-WARN "Advertising ID: Enabled" }
+
+$v = RegGet "HKLM:\SOFTWARE\Policies\Microsoft\Windows\System" "EnableActivityFeed"
+if ($v -eq 0) { Check-OK "Activity History: Disabled" }
+else { Check-WARN "Activity History: Enabled" }
+
+$v = RegGet "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot" "TurnOffWindowsCopilot"
+if ($v -eq 1) { Check-OK "Windows Copilot: Disabled" }
+else { Check-WARN "Windows Copilot: Enabled" }
 #endregion
 
-#region 11. GPU OPTIMIZATION
-if ($GPU) {
-    Write-Host "  ╔══════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-    Write-Host "  ║ 11. GPU OPTIMIZATION SETTINGS                                                       ║" -ForegroundColor $Cyan
-    Write-Host "  ╚══════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-    Write-Host ""
+#region MEMORY
+Section "MEMORY & STORAGE"
 
-    # Hardware Acceleration
-    $totalChecks++
-    $hwAccel = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Avalon.Graphics" -Name "DisableHWAcceleration" -ErrorAction SilentlyContinue
-    Write-Host "  [?] Hardware Acceleration: CHECKED" -ForegroundColor $Gray
+$ramGB = [math]::Round((Get-CimInstance Win32_ComputerSystem -EA SilentlyContinue).TotalPhysicalMemory / 1GB)
+$mmMgmt = "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management"
 
-    # GPU Preference
-    $totalChecks++
-    Write-Host "  [?] GPU Performance Preference: CHECKED" -ForegroundColor $Gray
+$v = RegGet $mmMgmt "DisablePagingExecutive"
+if ($ramGB -ge 8) {
+    if ($v -eq 1) { Check-OK "Kernel Paging Disabled: Ya (RAM=${ramGB}GB — aman)" }
+    else { Check-WARN "Kernel Paging: Masih aktif (RAM ${ramGB}GB, bisa dimatikan)" }
+} else {
+    if ($v -eq 1) { Check-WARN "Kernel Paging Disabled: Ya — tapi RAM hanya ${ramGB}GB, berisiko!" }
+    else { Check-OK "Kernel Paging: Aktif (RAM hanya ${ramGB}GB — ini benar)" }
+}
 
-    Write-Host ""
+$v = RegGet $mmMgmt "LargeSystemCache"
+if ($v -eq 0) { Check-OK "LargeSystemCache: 0 (benar untuk gaming)" }
+elseif ($v -eq 1) { Check-WARN "LargeSystemCache: 1 (setting server, bukan optimal untuk gaming)" }
+else { Check-WARN "LargeSystemCache: Default" }
+
+$lastAccess = fsutil behavior query disablelastaccess 2>$null
+if ($lastAccess -match "1") { Check-OK "NTFS Last Access Time: Disabled (akses file lebih cepat)" }
+else { Check-WARN "NTFS Last Access Time: Enabled" }
+
+$dot3 = fsutil behavior query disable8dot3 2>$null
+if ($dot3 -match "1") { Check-OK "NTFS 8.3 Filename: Disabled" }
+else { Check-WARN "NTFS 8.3 Filename: Enabled" }
+#endregion
+
+#region MOUSE
+Section "MOUSE & INPUT"
+
+$spd = RegGet "HKCU:\Control Panel\Mouse" "MouseSpeed"
+$t1  = RegGet "HKCU:\Control Panel\Mouse" "MouseThreshold1"
+$t2  = RegGet "HKCU:\Control Panel\Mouse" "MouseThreshold2"
+if (($spd -eq "0" -or $spd -eq 0) -and ($t1 -eq "0" -or $t1 -eq 0) -and ($t2 -eq "0" -or $t2 -eq 0)) {
+    Check-OK "Mouse Acceleration: Disabled (pointer precision off — aim lebih konsisten)"
+} else {
+    Check-FAIL "Mouse Acceleration: Enabled (Speed=$spd, T1=$t1, T2=$t2)"
 }
 #endregion
 
-#region SUMMARY
+#region WINDOWS 11 SPECIFIC
+if ($IsWin11) {
+    Section "WINDOWS 11 SPECIFIC"
+
+    $adv = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced"
+
+    $v = RegGet $adv "TaskbarDa"
+    if ($v -eq 0) { Check-OK "Widgets: Disabled (hemat RAM/CPU)" }
+    else { Check-FAIL "Widgets: Enabled (berjalan di background)" }
+
+    $v = RegGet $adv "TaskbarMn"
+    if ($v -eq 0) { Check-OK "Chat (Teams) Taskbar: Disabled" }
+    else { Check-WARN "Chat (Teams): Enabled di taskbar" }
+
+    $v = RegGet $adv "EnableSnapAssistFlyout"
+    if ($v -eq 0) { Check-OK "Snap Assist Flyout: Disabled" }
+    else { Check-WARN "Snap Assist Flyout: Enabled" }
+
+    $v = RegGet $adv "Start_IrisRecommendations"
+    if ($v -eq 0) { Check-OK "Recommended Files di Start: Disabled" }
+    else { Check-WARN "Recommended Files: Enabled" }
+
+    $v = RegGet "HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsCopilot" "TurnOffWindowsCopilot"
+    if ($v -eq 1) { Check-OK "Windows Copilot: Disabled" }
+    else { Check-WARN "Copilot: Enabled (buang resource)" }
+}
+#endregion
+
+#region SCHEDULED TASKS
+Section "TELEMETRY SCHEDULED TASKS (Disabled = Optimal)"
+
+$taskChecks = @(
+    @{Path="\Microsoft\Windows\Customer Experience Improvement Program\"; Name="Consolidator"},
+    @{Path="\Microsoft\Windows\Customer Experience Improvement Program\"; Name="KernelCeipTask"},
+    @{Path="\Microsoft\Windows\Customer Experience Improvement Program\"; Name="UsbCeip"},
+    @{Path="\Microsoft\Windows\Application Experience\";                  Name="ProgramDataUpdater"},
+    @{Path="\Microsoft\Windows\Application Experience\";                  Name="StartupAppTask"},
+    @{Path="\Microsoft\Windows\DiskDiagnostic\";                          Name="Microsoft-Windows-DiskDiagnosticDataCollector"},
+    @{Path="\Microsoft\Windows\Feedback\Siuf\";                           Name="DmClient"},
+    @{Path="\Microsoft\Windows\Location\";                                Name="Notifications"},
+    @{Path="\Microsoft\Windows\Maps\";                                    Name="MapsUpdateTask"}
+)
+
+foreach ($t in $taskChecks) {
+    $task = Get-ScheduledTask -TaskPath $t.Path -TaskName $t.Name -EA SilentlyContinue
+    if (-not $task) {
+        Check-SKIP "$($t.Name): Tidak ada"
+    } elseif ($task.State -eq "Disabled") {
+        Check-OK "$($t.Name): Disabled"
+    } else {
+        Check-WARN "$($t.Name): $($task.State) (belum dimatikan)"
+    }
+}
+#endregion
+
+#region FINAL SUMMARY
 Write-Host ""
-Write-Host "╔══════════════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "║                                         SUMMARY                                             ║" -ForegroundColor $Cyan
-Write-Host "╚══════════════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
+Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
+Write-Host "  ║                        HASIL SUMMARY                            ║" -ForegroundColor $Cyan
+Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
 Write-Host ""
 
-$percentOptimized = [math]::Round(($passedChecks / $totalChecks) * 100)
+$pctOptimized = if ($total -gt 0) { [math]::Round($passed / ($total - $skipped) * 100) } else { 0 }
 
-if ($percentOptimized -ge 80) {
-    Write-Host "  ╔════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Green
-    Write-Host "  ║  STATUS: FULLY OPTIMIZED! ($percentOptimized%) - Ready for maximum gaming!        ║" -ForegroundColor $Green
-    Write-Host "  ╚════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Green
-} elseif ($percentOptimized -ge 60) {
-    Write-Host "  ╔════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Yellow
-    Write-Host "  ║  STATUS: PARTIALLY OPTIMIZED ($percentOptimized%) - Some improvements available   ║" -ForegroundColor $Yellow
-    Write-Host "  ╚════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Yellow
-} elseif ($percentOptimized -ge 40) {
-    Write-Host "  ╔════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Yellow
-    Write-Host "  ║  STATUS: MODERATELY OPTIMIZED ($percentOptimized%) - Significant improvements    ║" -ForegroundColor $Yellow
-    Write-Host "  ╚════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Yellow
+Write-Host "  Total Check  : $total" -ForegroundColor $White
+Write-Host "  ✓ Optimal    : $passed" -ForegroundColor $Green
+Write-Host "  ✗ Tidak OK   : $failed" -ForegroundColor $Red
+Write-Host "  ! Warning    : $warning" -ForegroundColor $Yellow
+Write-Host "  – Skip       : $skipped" -ForegroundColor $Gray
+Write-Host ""
+
+if ($pctOptimized -ge 85) {
+    Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor $Green
+    Write-Host "  ║  STATUS: FULLY OPTIMIZED ($pctOptimized%) — Siap gaming maksimal! ║" -ForegroundColor $Green
+    Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor $Green
+} elseif ($pctOptimized -ge 65) {
+    Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor $Yellow
+    Write-Host "  ║  STATUS: SEBAGIAN OPTIMAL ($pctOptimized%) — Ada yang perlu fix  ║" -ForegroundColor $Yellow
+    Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor $Yellow
+} elseif ($pctOptimized -ge 40) {
+    Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor $Yellow
+    Write-Host "  ║  STATUS: CUKUP ($pctOptimized%) — Banyak yang bisa ditingkatkan  ║" -ForegroundColor $Yellow
+    Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor $Yellow
 } else {
-    Write-Host "  ╔════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Red
-    Write-Host "  ║  STATUS: NOT OPTIMIZED ($percentOptimized%) - Your PC needs optimization!        ║" -ForegroundColor $Red
-    Write-Host "  ╚════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Red
+    Write-Host "  ╔══════════════════════════════════════════════════════════════════╗" -ForegroundColor $Red
+    Write-Host "  ║  STATUS: BELUM OPTIMAL ($pctOptimized%) — Jalankan ULTWEAKS!     ║" -ForegroundColor $Red
+    Write-Host "  ╚══════════════════════════════════════════════════════════════════╝" -ForegroundColor $Red
 }
 
 Write-Host ""
-Write-Host "  ┌─────────────────────────────────────────────────────────────────────────────────────┐" -ForegroundColor $Gray
-Write-Host "  │  📊 Total Checks: $totalChecks    [✓] Optimized: $passedChecks    [✗] Not Optimized: $failedChecks    [!] Warnings: $warnings  │" -ForegroundColor $White
-Write-Host "  └─────────────────────────────────────────────────────────────────────────────────────┘" -ForegroundColor $Gray
-Write-Host ""
-
-# Recommendations
-if ($failedChecks -gt 0) {
-    Write-Host "  ╔════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Yellow
-    Write-Host "  ║                              RECOMMENDATIONS                                       ║" -ForegroundColor $Yellow
-    Write-Host "  ╚════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Yellow
+if ($failed -gt 0 -or $warning -gt 0) {
+    Write-Host "  Untuk apply semua optimisasi sekaligus, jalankan:" -ForegroundColor $Yellow
+    Write-Host "  1. ULTWEAKS_v11_FIXED.ps1   — System optimizer utama" -ForegroundColor $White
+    Write-Host "  2. ULTWEAKS_GPU_v5.ps1      — GPU optimizer" -ForegroundColor $White
     Write-Host ""
-    Write-Host "  To apply ALL optimizations at once, run the ULTWEAKS optimizer:" -ForegroundColor $White
-    Write-Host "  " -NoNewline
-    Write-Host "iex (irm https://raw.githubusercontent.com/ItsAGENT007/ultweaks/refs/heads/main/ultweaks.ps1)" -ForegroundColor $Cyan
-    Write-Host ""
-    Write-Host "  Or manually address the [✗] NOT OPTIMIZED items above." -ForegroundColor $Gray
-} else {
-    Write-Host "  ╔════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Green
-    Write-Host "  ║                                   PERFECT!                                          ║" -ForegroundColor $Green
-    Write-Host "  ╚════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Green
-    Write-Host ""
-    Write-Host "  ✓ Your PC is FULLY OPTIMIZED! No action needed." -ForegroundColor $Green
+    Write-Host "  Klik kanan file .ps1 → Run with PowerShell → pilih Y" -ForegroundColor $White
 }
 
 Write-Host ""
-Write-Host "  ╔════════════════════════════════════════════════════════════════════════════════════╗" -ForegroundColor $Cyan
-Write-Host "  ║  Generated by ULTWEAKS Optimizer - https://github.com/ItsAGENT007/ultweaks        ║" -ForegroundColor $Cyan
-Write-Host "  ╚════════════════════════════════════════════════════════════════════════════════════╝" -ForegroundColor $Cyan
-Write-Host ""
-
-Read-Host "Press Enter to exit"
+Read-Host "  Tekan Enter untuk keluar"
 #endregion
